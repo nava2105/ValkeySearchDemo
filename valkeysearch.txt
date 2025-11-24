@@ -1,0 +1,43 @@
+# Usamos la etiqueta específica 8.1.0 para estabilidad
+
+docker pull valkey/valkey-bundle:8.1.0
+
+------------------------------------------------------------------------------------------------------------------------
+
+# Opción A: Modo rápido (para pruebas)
+
+docker run --name valkey-search-container `
+  -d -p 6379:6379 `
+  valkey/valkey-bundle:8.1.0
+
+
+# Opción B: Con persistencia de datos recomendada
+
+docker run --name valkey-search-container `
+  -d -p 6379:6379 `
+  -v valkey-data:/data `
+  valkey/valkey-bundle:8.1.0 `
+  valkey-server --save 60 1 --loglevel warning
+
+------------------------------------------------------------------------------------------------------------------------
+
+# Verificar que Valkey Search está activo
+
+docker exec -it valkey-search-container valkey-cli -h localhost -p 6379 -3
+
+# Dentro del CLI
+
+INFO modules
+
+# 1. Detener y eliminar contenedor
+docker stop valkey-search-container
+docker rm valkey-search-container
+# 2. Eliminar volumen corrupto
+docker volume rm valkey-data
+# 3. Crear contenedor NUEVO y LIMPIO
+docker run --name valkey-search-container -d -p 6379:6379 -v valkey-data:/data valkey/valkey-bundle:8.1.0 valkey-server --save 60 1 --loglevel warning
+# 4. Esperar 5 segundos
+Start-Sleep -Seconds 5
+# 5. Verificar módulos (debe mostrar search, json, bf, ldap)
+docker exec -it valkey-search-container valkey-cli INFO modules
+

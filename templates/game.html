@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="card mb-4">
+    <div class="card-body">
+        <h4>¿Cuál palabra es conceptualmente idéntica o más cercana?</h4>
+        <hr>
+        <div class="text-center mb-4">
+            <h2 class="text-primary">
+                <strong>{{ target_word }}</strong>
+                <small class="text-muted fs-6">({{ target_lang_name }})</small>
+            </h2>
+            <p class="text-muted">Selecciona la opción más semánticamente similar</p>
+        </div>
+        
+        <form method="POST">
+            <div class="row g-3">
+                {% for option in options %}
+                <div class="col-md-6">
+                    <button type="submit" name="selected_option" value="{{ loop.index0 }}" 
+                            class="btn btn-outline-primary w-100 py-3" 
+                            {% if show_result %}disabled{% endif %}>
+                        <strong>{{ option.word }}</strong>
+                        <br>
+                        <small class="text-muted">{{ languages.get(option.language, '') }}</small>
+                    </button>
+                </div>
+                {% endfor %}
+            </div>
+            <input type="hidden" name="check_answer" value="1">
+        </form>
+        
+        {% if show_result %}
+        <hr>
+        <div class="text-center">
+            {% if is_correct %}
+            <div class="alert alert-success">
+                <h4>✓ ¡Correcto!</h4>
+                <p>"{{ options[selected_idx].word }}" es conceptualmente la mejor opción</p>
+            </div>
+            {% else %}
+            <div class="alert alert-danger">
+                <h4>✗ Casi...</h4>
+                <p>La respuesta correcta era: <strong>"{{ correct_word }}"</strong></p>
+            </div>
+            {% endif %}
+        </div>
+        {% endif %}
+        
+        <hr>
+        <form method="POST" class="text-center">
+            <button type="submit" name="new_game" class="btn btn-success">
+                Nueva Ronda
+            </button>
+        </form>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-body">
+        <h5>Instrucciones:</h5>
+        <p class="mb-0">
+            1. Te mostramos una palabra en un idioma.<br>
+            2. Selecciona la opción que sea conceptualmente idéntica o más similar.<br>
+            3. ¡Puede ser la misma palabra o una traducción/paráfrasis!
+        </p>
+    </div>
+</div>
+{% endblock %}

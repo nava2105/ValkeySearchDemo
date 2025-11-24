@@ -1,0 +1,130 @@
+
+docker pull valkey/valkey
+
+docker run -d --name my-valkey-persistent `
+  -p 6379:6379 `
+  -v C:\ruta\a\datos\valkey:/data `
+  valkey/valkey valkey-server --save 60 1 --loglevel warning
+
+docker exec -it my-valkey-persistent valkey-cli ping
+docker exec -it my-valkey-persistent valkey-cli
+
+# Delete all data
+docker exec -it my-valkey-persistent valkey-cli FLUSHALL SYNC
+
+# Backup rápido (desde el host)
+docker exec my-valkey-persistent valkey-cli BGSAVE
+
+
+SET proyecto "Valkey en Docker"
+GET proyecto
+DEL proyecto
+
+
+# Strings: Contador de visitas para un usuario
+SET usuario:juan:visitas 0
+INCR usuario:juan:visitas
+INCRBY usuario:juan:visitas 5
+GET usuario:juan:visitas
+EXPIRE usuario:juan:visitas 3600  # Expira en 1 hora
+EXPIRE usuario:juan:visitas 60  # Expira en 1 minuto
+EXPIRE usuario:juan:visitas 30  # Expira en 30 segundos
+
+
+# Hashes: Perfil de usuario con múltiples campos
+HSET perfil:123 nombre "Ana" email "ana@ejemplo.com" edad 28
+HGET perfil:123 nombre
+HGETALL perfil:123
+EXPIRE perfil:123 15  # Expira en 15 segundos
+
+
+# Listas: Cola de tareas de procesamiento
+LPUSH cola:emails "tarea1" "tarea2" "tarea3"
+RPOP cola:emails  # Procesar el siguiente
+LRANGE cola:emails 0 -1
+
+
+# Conjuntos: Etiquetas únicas para productos
+SADD producto:456 etiquetas "electrónica" "oferta" "nuevo"
+SISMEMBER producto:456 etiquetas "oferta"
+
+
+========================================================================================================================
+
+
+# Terminal 1: Suscribirse a un canal
+SUBSCRIBE notificaciones:sistema
+
+
+# Terminal 2: Publicar mensajes
+127.0.0.1:6379> PUBLISH notificaciones:sistema "Nuevo pedido #789"
+127.0.0.1:6379> PUBLISH notificaciones:sistema "Pago confirmado para #789"
+
+
+========================================================================================================================
+
+
+# Añadir eventos a un stream
+XADD eventos:app * tipo "login" usuario "juan" ip "192.168.1.1"
+XADD eventos:app * tipo "compra" usuario "ana" monto 150.00
+
+
+# Consumir eventos desde el principio
+XREAD STREAMS eventos:app 0
+
+# Grupo de consumidores para procesamiento paralelo
+XGROUP CREATE eventos:app grupo_procesadores 0
+XREADGROUP GROUP grupo_procesadores consumidor1 STREAMS eventos:app >
+
+
+========================================================================================================================
+
+
+# Iniciamos el inventario para el producto
+SET inventario:producto789 20
+
+
+# Script Lua para actualizar inventario con límite de stock
+EVAL "local stock = tonumber(redis.call('GET', KEYS[1])) if stock >= tonumber(ARGV[1]) then redis.call('DECRBY', KEYS[1], ARGV[1]) return stock - ARGV[1] else return -1 end" 1 inventario:producto789 5
+GET inventario:producto789
+
+
+# Verificar el inventario
+GET inventario:producto789
+
+
+========================================================================================================================
+
+
+# Contar visitantes únicos eficientemente (usa muy poca memoria)
+PFADD visitantes:2024-11-17 "192.168.1.1" "192.168.1.2" "10.0.0.5"
+PFADD visitantes:2024-11-17 "192.168.1.1" "192.168.1.3"  # IP duplicada
+PFCOUNT visitantes:2024-11-17
+
+
+========================================================================================================================
+
+
+# Añadir ubicaciones de tiendas
+GEOADD tiendas -74.0059 40.7128 "NuevaYork" -87.6298 41.8781 "Chicago" -118.2437 34.0522 "LosAngeles"
+
+
+# Buscar tiendas dentro de 500 km desde Nueva York
+GEORADIUS tiendas -74.0059 40.7128 500 km
+
+
+# Calcular distancia entre tiendas
+GEODIST tiendas "NuevaYork" "Chicago" km
+
+
+========================================================================================================================
+
+
+# Analizar claves grandes en la base de datos
+exit
+docker exec my-valkey-persistent valkey-cli --bigkeys
+
+# Monitorear comandos en tiempo real
+docker exec my-valkey-persistent valkey-cli MONITOR
+# Medir latencia del servidor
+docker exec my-valkey-persistent valkey-cli --latency

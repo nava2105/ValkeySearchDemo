@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="card mb-4">
+    <div class="card-body">
+        <form method="POST" class="row g-3">
+            <div class="col-md-5">
+                <label for="word" class="form-label">Palabra o concepto:</label>
+                <input type="text" class="form-control" id="word" name="word" 
+                       value="{{ query_word }}" placeholder="Ej: gatto, love, liberté" required>
+            </div>
+            
+            <div class="col-md-4">
+                <label for="language" class="form-label">Idioma origen (opcional):</label>
+                <select class="form-select" id="language" name="language">
+                    <option value="all" {% if selected_lang == 'all' %}selected{% endif %}>
+                        Todos los idiomas
+                    </option>
+                    {% for code, name in languages.items() %}
+                    <option value="{{ code }}" {% if selected_lang == code %}selected{% endif %}>
+                        {{ name }} ({{ code }})
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            
+            <div class="col-md-2">
+                <label for="k" class="form-label">Resultados:</label>
+                <input type="number" class="form-control" id="k" name="k" 
+                       value="{{ k }}" min="1" max="20">
+            </div>
+            
+            <div class="col-md-1 d-flex align-items-end">
+                <button type="submit" class="btn btn-primary w-100">Buscar</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% if messages %}
+    {% for category, message in messages %}
+      <div class="alert alert-{{ 'danger' if category == 'error' else 'warning' }}">
+        {{ message }}
+      </div>
+    {% endfor %}
+  {% endif %}
+{% endwith %}
+
+{% if results %}
+<div class="card">
+    <div class="card-header">
+        <h5>Similares a: <strong>"{{ query_word }}"</strong></h5>
+    </div>
+    <div class="card-body">
+        <table class="table table-hover">
+            <thead>
+                <tr>
+                    <th>Palabra</th>
+                    <th>Idioma</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in results %}
+                <tr>
+                    <td><strong>{{ item.word }}</strong></td>
+                    <td>
+                        <span class="badge bg-secondary">{{ item.language }}</span>
+                        <small class="text-muted">{{ languages.get(item.language, '') }}</small>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
