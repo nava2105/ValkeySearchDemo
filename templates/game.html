@@ -3,14 +3,14 @@
 {% block content %}
 <div class="card mb-4">
     <div class="card-body">
-        <h4>¿Cuál palabra es conceptualmente idéntica o más cercana?</h4>
+        <h4>¿Cuál palabra es más cercana vectorialmente?</h4>
         <hr>
         <div class="text-center mb-4">
             <h2 class="text-primary">
                 <strong>{{ target_word }}</strong>
                 <small class="text-muted fs-6">({{ target_lang_name }})</small>
             </h2>
-            <p class="text-muted">Selecciona la opción más semánticamente similar</p>
+            <p class="text-muted">Selecciona la opción más cercana vectorialmente</p>
         </div>
         
         <form method="POST">
@@ -36,7 +36,7 @@
             {% if is_correct %}
             <div class="alert alert-success">
                 <h4>✓ ¡Correcto!</h4>
-                <p>"{{ options[selected_idx].word }}" es conceptualmente la mejor opción</p>
+                <p>"{{ options[selected_idx].word }}" es vectorialmente la mejor opción</p>
             </div>
             {% else %}
             <div class="alert alert-danger">
@@ -61,7 +61,7 @@
         <h5>Instrucciones:</h5>
         <p class="mb-0">
             1. Te mostramos una palabra en un idioma.<br>
-            2. Selecciona la opción que sea conceptualmente idéntica o más similar.<br>
+            2. Selecciona la opción que sea más cercana vectorialmente.<br>
             3. ¡Puede ser la misma palabra o una traducción/paráfrasis!
         </p>
     </div>

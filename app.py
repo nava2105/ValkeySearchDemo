@@ -7,46 +7,46 @@ import random
 app = Flask(__name__)
 app.secret_key = 'dev-key-change-in-production-semantic-dict-2025'
 
-# === CONFIGURACIÓN GLOBAL ===
+"""
+=== GLOBAL CONFIGURATION ===
+configurate the database, the model word2vec and the Languages
+"""
 client = valkey.Valkey(host='localhost', port=6379, decode_responses=False)
-MODEL_NAME = 'paraphrase-multilingual-MiniLM-L12-v2'
-
+MODEL_NAME = 'paraphrase-multilingual-MiniLM-L12-v2' # 12 Layers, Tokenization, Contextual Embeddings, Pooling, Output, Multilingual 50 languages
 LANGUAGES = {
     'es': 'Español', 'en': 'Inglés', 'fr': 'Francés',
     'ru': 'Ruso', 'it': 'Italiano', 'de': 'Alemán',
     'pt': 'Portugués'
 }
-
-print("Cargando modelo...")
+print("Loading model...")
 model = SentenceTransformer(MODEL_NAME)
-print("✓ Modelo cargado")
+print("✓ Model loaded")
 
 
-def search_similar_word(word: str, lang_filter: str = None, k: int = 5,
-                        exclude_lang: str = None, max_distance: float = 1.0):
+def search_similar_word(word: str, lang_filter: str = None, k: int = 5, exclude_lang: str = None, max_distance: float = 1.0):
     """
-    Búsqueda versátil de palabras similares con filtros.
+    Versatile search for similar words with filters.
+    :param word:
+    :param lang_filter:
+    :param k:
+    :param exclude_lang:
+    :param max_distance:
+    :return matches:
     """
     try:
-        query_vector = model.encode([word])[0].astype(np.float32).tobytes()
-
-        # Construir consulta correctamente
-        query_parts = []
-
-        # Filtro positivo (incluir solo un idioma)
+        query_vector = model.encode([word])[0].astype(np.float32).tobytes() # Use the model to convert the word into a dense high-dimensional vector
+        filter_parts = []
         if lang_filter:
-            query_parts.append(f"@language:{lang_filter}")
-
-        # Filtro negativo (excluir un idioma) - SINTAXIS CORRECTA
+            filter_parts.append(f"@language:{{{lang_filter}}}")
         if exclude_lang:
-            # Forma 1: NOT @field:value
-            query_parts.append(f"NOT @language:{exclude_lang}")
-            # Forma 2 (alternativa si la anterior falla): -@field:{value}
-            # query_parts.append(f"-@language:{{{exclude_lang}}}")
-
-        query_parts.append(f"*=>[KNN {k} @vector $vec]")
-        full_query = " ".join(query_parts)
-
+            filter_parts.append(f"-@language:{{{exclude_lang}}}")
+        if filter_parts:
+            base_expr = " ".join(filter_parts)
+            if len(filter_parts) > 1:
+                base_expr = f"({base_expr})"
+            full_query = f"{base_expr}=>[KNN {k} @vector $vec]" # Search for the closest k vectors in the entire index
+        else:
+            full_query = f"*=>[KNN {k} @vector $vec]"
         results = client.execute_command(
             "FT.SEARCH", "words_idx",
             full_query,
@@ -54,88 +54,75 @@ def search_similar_word(word: str, lang_filter: str = None, k: int = 5,
             "DIALECT", "2",
             "RETURN", "3", "word", "language", "vector",
             "LIMIT", "0", str(k)
-        )
-
+        ) # ValkeySearch command for hybrid search
+        # Hybrid search combines vector similarity with structured filters in real time
         if len(results) <= 1:
             return []
-
         matches = []
         for i in range(1, len(results), 2):
             score = float(results[i]) if isinstance(results[i], (int, float)) else 0.0
-
             if score > max_distance:
                 continue
-
             fields = results[i + 1]
             word_val = b''
             lang_val = b''
-
             for idx, field in enumerate(fields):
                 if field == b'word' and idx + 1 < len(fields):
                     word_val = fields[idx + 1]
                 elif field == b'language' and idx + 1 < len(fields):
                     lang_val = fields[idx + 1]
-
             if word_val and lang_val:
                 matches.append({
                     'word': word_val.decode('utf-8'),
                     'language': lang_val.decode('utf-8'),
                     'score': score
                 })
-
         return matches
-
     except Exception as e:
         print(f"Error en búsqueda: {e}")
-        # NO lanzar, devolver vacío para que la app no caiga
+        print(f"Query usada: {full_query}")
         return []
 
 
 def get_random_word():
-    """Obtiene una palabra aleatoria de la base de datos."""
+    """
+    Get a random word from the database.
+    :return {word, language}:
+    """
     try:
-        # Intentar varias veces para evitar claves corruptas
-        for attempt in range(5):
-            keys = []
-            for key in client.scan_iter("word:vector:*", count=200):
-                keys.append(key)
-                if len(keys) >= 200:
-                    break
-
-            if not keys:
-                return None
-
-            random_key = random.choice(keys)
-            data = client.hgetall(random_key)
-
-            word = data.get(b'word', b'').decode('utf-8')
-            lang = data.get(b'language', b'').decode('utf-8')
-
-            if word and lang:  # Validar que no estén vacíos
-                return {'word': word, 'language': lang}
-
+        # Try several times to avoid corrupted keys
+        for _ in range(5):
+            # Obtain random key on the server
+            random_key = client.randomkey()
+            if not random_key or not random_key.startswith(b'word:vector:'):
+                continue
+            # Use HMGET to obtain only necessary fields
+            word, lang = client.hmget(random_key, 'word', 'language')
+            if word and lang:
+                return {'word': word.decode('utf-8'), 'language': lang.decode('utf-8')}
         return None
-
     except Exception as e:
         print(f"Error obteniendo palabra aleatoria: {e}")
         return None
 
 
 def get_game_options(target_word, target_lang):
-    """Genera opciones para el juego: 4 palabras similares pero NUNCA la target exacta."""
-    # Obtener muchos vecinos (incluyendo el mismo idioma)
+    """
+    Generate options for the game: 4 similar words but NEVER the exact target.
+    :param target_word:
+    :param target_lang:
+    :return valid_options:
+    """
+    # Get lots of neighbors (including the same language)
     neighbors = search_similar_word(target_word, k=50)
-
-    # Filtrar: excluir la palabra exacta y asegurar variedad de idiomas
+    # Filter: exclude the exact word and ensure language variety
     valid_options = []
     used_langs = set()
-
     for neighbor in neighbors:
-        # Excluir palabra exacta (insensible a mayúsculas)
+        # Exclude exact word (case-insensitive)
         if neighbor['word'].lower() == target_word.lower():
             continue
-
-        # Queremos variedad de idiomas
+        # Variety of languages
         if neighbor['language'] not in used_langs:
             valid_options.append({
                 'word': neighbor['word'],
@@ -143,15 +130,13 @@ def get_game_options(target_word, target_lang):
                 'is_correct': False
             })
             used_langs.add(neighbor['language'])
-
         if len(valid_options) >= 4:
             break
-
-    # Si no alcanzamos 4 opciones, agregar aleatorias de otros idiomas
+    # If we don't reach 4 options, add random ones from other languages
     while len(valid_options) < 4:
         random_data = get_random_word()
         if random_data and random_data['language'] not in used_langs:
-            # Asegurarnos de no agregar la palabra objetivo por accidente
+            # Ensure that we do not accidentally add the word “objective.”
             if random_data['word'].lower() != target_word.lower():
                 valid_options.append({
                     'word': random_data['word'],
@@ -159,49 +144,45 @@ def get_game_options(target_word, target_lang):
                     'is_correct': False
                 })
                 used_langs.add(random_data['language'])
-
-    # La opción CORRECTA será la primera de la lista filtrada (la más cercana)
+    # The CORRECT option will be the first one on the filtered list (the closest one).
     if valid_options:
         valid_options[0]['is_correct'] = True
-
-    # Mezclar para que no siempre esté en la misma posición
+    # Mix so that it is not always in the same position.
     random.shuffle(valid_options)
-
-    # Guardar el índice correcto después de mezclar
+    # Save the correct index after mixing
     try:
         correct_index = next(i for i, opt in enumerate(valid_options) if opt['is_correct'])
         session['correct_index'] = correct_index
-        session['correct_word'] = valid_options[correct_index]['word']  # Guardar para mostrar
+        session['correct_word'] = valid_options[correct_index]['word']  # Save to display
     except StopIteration:
         session['correct_index'] = 0
         session['correct_word'] = valid_options[0]['word']
-
     return valid_options
 
 
 @app.route('/', methods=['GET', 'POST'])
 def dictionary():
-    """Pestaña 1: Diccionario Semántico Multilingüe"""
+    """
+    Tab 1: Multilingual Semantic Dictionary
+    :return dictionary.html:
+    """
     results = []
     query_word = ""
     selected_lang = "all"
     k = 5
-
     if request.method == 'POST':
         query_word = request.form.get('word', '').strip()
         selected_lang = request.form.get('language', 'all')
         try:
-            k = max(1, min(int(request.form.get('k', 5)), 20))
+            k = max(1, min(int(request.form.get('k', 5)), 20)) # 20 maximum neighbors
         except:
             k = 5
-
         if query_word:
             lang_filter = None if selected_lang == "all" else selected_lang
             results = search_similar_word(query_word, lang_filter=lang_filter, k=k)
 
             if not results:
                 flash(f"No se encontraron similares para '{query_word}'", "warning")
-
     return render_template('dictionary.html',
                            results=results,
                            query_word=query_word,
@@ -213,16 +194,18 @@ def dictionary():
 
 @app.route('/game', methods=['GET', 'POST'])
 def game():
-    """Pestaña 2: Juego Conecta las Palabras"""
+    """
+    Tab 2: Connect the Words Game
+    :return game.html:
+    """
     if request.method == 'POST':
         if 'new_game' in request.form:
-            # Nueva ronda: limpiar todo
+            # New round: clean everything up
             session.clear()
             random_data = get_random_word()
             if not random_data:
                 flash("Error al cargar palabra", "error")
                 return redirect(url_for('game'))
-
             session['game_word'] = random_data['word']
             session['game_lang'] = random_data['language']
             session['game_options'] = get_game_options(
@@ -231,19 +214,16 @@ def game():
             )
             session['show_result'] = False
             return redirect(url_for('game'))
-
         elif 'check_answer' in request.form:
-            # Verificar respuesta
+            # Verify answer
             selected_idx = request.form.get('selected_option')
             if selected_idx and selected_idx.isdigit():
                 idx = int(selected_idx)
                 session['selected_idx'] = idx
                 session['show_result'] = True
                 session['is_correct'] = (idx == session.get('correct_index'))
-
             return redirect(url_for('game'))
-
-    # Inicializar si no hay juego en curso
+    # Initialise if no game is in progress
     if 'game_word' not in session:
         random_data = get_random_word()
         if random_data:
@@ -254,7 +234,6 @@ def game():
                 random_data['language']
             )
             session['show_result'] = False
-
     return render_template('game.html',
                            target_word=session.get('game_word', ''),
                            target_lang=session.get('game_lang', ''),
@@ -263,7 +242,7 @@ def game():
                            show_result=session.get('show_result', False),
                            selected_idx=session.get('selected_idx', -1),
                            is_correct=session.get('is_correct', False),
-                           correct_word=session.get('correct_word', ''),  # Nueva variable
+                           correct_word=session.get('correct_word', ''),  # New variable
                            languages=LANGUAGES,
                            active_tab='game')
 
