@@ -46,6 +46,14 @@ The project includes the following capabilities:
   - Immediate feedback with correct answers
   - Unlimited rounds with random word selection
 
+- **Vector Visualizer**:
+  - Interactive 2D visualization of semantic vector space
+  - PCA dimensionality reduction for real-time rendering
+  - Color-coded by language
+  - Hover to see word details
+  - Filter by language and adjust sample size
+  - Performance-optimized with batch loading
+
 - **Multilingual Support**:
   - 7 languages: Spanish, English, French, Russian, Italian, German, Portuguese
   - 15,000 most frequent words per language
@@ -64,8 +72,10 @@ Technologies used in this project:
 - [Flask](https://flask.palletsprojects.com/): Web framework
 - [Valkey](https://valkey.io/): Vector database with Search module
 - [SentenceTransformers](https://www.sbert.net/): Multilingual embeddings
+- [scikit-learn](https://scikit-learn.org/): PCA for dimensionality reduction
 - [Docker](https://www.docker.com/): Containerization
 - [Bootstrap](https://getbootstrap.com/): Frontend styling
+- [Plotly.js](https://plotly.com/javascript/): Interactive visualizations
 - [wordfreq](https://pypi.org/project/wordfreq/): Word frequency lists
 
 ---
@@ -137,6 +147,19 @@ Once the application is running, you can interact with it through the web interf
 * Options: "freedom" (en), "liberté" (fr), "book" (en), "freiheit" (de)
 * Correct: "freedom" or "liberté" (conceptually closest)
 
+### Using the Vector Visualizer:
+1. Navigate to the "Visualizador de Vectores" tab
+2. Select language filter (optional) to focus on specific languages
+3. Choose sample size (100-10000 words) based on performance
+4. Click "Actualizar" to generate the 2D visualization
+5. Interact with the plot: hover over points to see words, toggle languages, zoom/pan
+
+#### Visualization Features:
+- Points are color-coded by language
+- PCA reduces 384 dimensions to 2D for visualization
+- Explained variance ratio displayed for quality assessment
+- Optimized batch loading for fast rendering
+
 ---
 
 ## Endpoints
@@ -144,29 +167,21 @@ Below is a comprehensive list of the endpoints included in the project:
 
 ### Public Endpoints (No Authentication Required)
 - **Dictionary Search**
-    - GET /
+  - `GET /` - Renders the dictionary interface
+  - `POST /` - Processes search form and returns semantic results
 
-    Renders the dictionary interface
-    - POST / 
-
-  Processes search form and returns semantic results
 - **Game Interface**
-    - GET /game
+  - `GET /game` - Renders the word connection game
+  - `POST /game` - Processes game answers and new round requests
 
-  Renders the word connection game
-    - POST /game
-
-  Processes game answers and new round requests
----
+- **Vector Visualizer**
+  - `GET /visualize` - Renders the 2D vector visualization interface
+  - `POST /visualize` - Processes visualization parameters and returns Plotly data
 
 ### Data Loading Endpoints (Development Only)
 - **Initialize Database**
-    - python main.py
-Command-line script that:
-        - Cleans existing Valkey data 
-        - Generates embeddings for 105,000 words
-        - Creates HNSW vector index
-        - Verifies storage and search functionality
+  - Command: `python main.py`
+  - Description: Cleans existing Valkey data, generates embeddings for 105,000 words, creates HNSW vector index, verifies storage and search functionality
 
 ---
 
@@ -174,17 +189,27 @@ Command-line script that:
 - **Model Configuration:**
     - Uses paraphrase-multilingual-MiniLM-L12-v2 (384-dimensional vectors)
     - Can be changed in app.py and main.py for different models
+    - Model size: ~90MB download on first run
 - **Valkey Index Configuration:**
     - HNSW algorithm with cosine distance
     - Prefix: word:vector:*
     - Vector dimension: 384 (FLOAT32)
+    - Optimized for hybrid vector + text search
+- **Visualization Configuration:**
+    - PCA with 2 components for real-time 2D visualization
+    - Random sampling for performance (configurable: 100-10000 words)
+    - Language-based color coding with 7 predefined colors
+    - Plotly.js for interactive rendering
 - **Performance:**
     - First load: ~5-10 minutes for 105k words
     - Search latency: <100ms per query
-    - Game generation: <500ms per round
+    - Game generation: <500ms per round 
+    - Visualization: <2s for 200 words, <5s for 1000 words 
+    - Memory usage: ~150MB for full dataset
 - **Word Corpus:**
     - 15,000 most frequent words per language from wordfreq
-    - Total database size: ~150MB with vectors
+    - Total database size: ~150MB with vectors 
+    - Covers 7 languages: es, en, fr, ru, it, de, pt
 
 ---
 

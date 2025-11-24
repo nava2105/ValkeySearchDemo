@@ -3,13 +3,15 @@ import valkey
 import numpy as np
 from sentence_transformers import SentenceTransformer
 import random
+from sklearn.decomposition import PCA
+import time
 
 app = Flask(__name__)
 app.secret_key = 'dev-key-change-in-production-semantic-dict-2025'
 
 """
 === GLOBAL CONFIGURATION ===
-configurate the database, the model word2vec and the Languages
+Configurate the database, the model word2vec and the Languages
 """
 client = valkey.Valkey(host='localhost', port=6379, decode_responses=False)
 MODEL_NAME = 'paraphrase-multilingual-MiniLM-L12-v2' # 12 Layers, Tokenization, Contextual Embeddings, Pooling, Output, Multilingual 50 languages
@@ -160,6 +162,68 @@ def get_game_options(target_word, target_lang):
     return valid_options
 
 
+def get_sample(limit=300, lang_filter="all"):
+    """
+    Recover vectors in batches with pipeline
+    :param limit:
+    :param lang_filter:
+    :return words_data:
+    """
+    words_data = []
+    keys_to_fetch = []
+    # Collect keys quickly
+    for key in client.scan_iter("word:vector:*", count=500):
+        if len(keys_to_fetch) >= limit:
+            break
+        keys_to_fetch.append(key)
+    if not keys_to_fetch:
+        return []
+    # Obtain all data in 1 call
+    pipeline = client.pipeline()
+    for key in keys_to_fetch:
+        pipeline.hmget(key, 'word', 'language', 'vector')
+    results = pipeline.execute()
+    # Process results
+    for result in results:
+        if not result or len(result) != 3:
+            continue
+        word, lang, vector_bytes = result
+        if not all([word, lang, vector_bytes]):
+            continue
+        lang_decoded = lang.decode('utf-8')
+        if lang_filter != "all" and lang_filter != lang_decoded:
+            continue
+        words_data.append({
+            'word': word.decode('utf-8'),
+            'language': lang_decoded,
+            'vector': np.frombuffer(vector_bytes, dtype=np.float32)
+        })
+    return words_data
+
+
+def reduce_dimensions_fast(words_data, dimensions=2):
+    """
+    PCA optimization for 2D
+    :param words_data:
+    :param dimensions:
+    :return {x, y, words, languages, explained_variance}:
+    """
+    if len(words_data) < 3:
+        return None
+    vectors = np.array([item['vector'] for item in words_data])
+    # Use a maximum of 2 components for speed
+    n_components = min(2, vectors.shape[0] - 1, vectors.shape[1])
+    pca = PCA(n_components=n_components, random_state=42)
+    reduced = pca.fit_transform(vectors)
+    return {
+        'x': reduced[:, 0].tolist(),
+        'y': reduced[:, 1].tolist(),
+        'words': [item['word'] for item in words_data],
+        'languages': [item['language'] for item in words_data],
+        'explained_variance': float(pca.explained_variance_ratio_.sum())
+    }
+
+
 @app.route('/', methods=['GET', 'POST'])
 def dictionary():
     """
@@ -245,6 +309,37 @@ def game():
                            correct_word=session.get('correct_word', ''),  # New variable
                            languages=LANGUAGES,
                            active_tab='game')
+
+
+@app.route('/visualize', methods=['GET', 'POST'])
+def visualize():
+    """
+    2D display
+    :return visualize.html:
+    """
+    plot_data = None
+    selected_lang = "all"
+    max_words = 200
+    if request.method == 'POST':
+        selected_lang = request.form.get('language', 'all')
+        max_words = min(int(request.form.get('max_words', 200)), 10000)
+    # Measure time
+    start = time.time()
+    words_data = get_sample(limit=max_words, lang_filter=selected_lang)
+    load_time = time.time() - start
+    print(f"Cargados {len(words_data)} vectores en {load_time:.2f}s")
+    if len(words_data) >= 3:
+        plot_data = reduce_dimensions_fast(words_data, 2)
+    else:
+        flash(f"Solo {len(words_data)} palabras encontradas. Ejecuta main.py primero.", "warning")
+    return render_template('visualize.html',
+                           plot_data=plot_data,
+                           selected_lang=selected_lang,
+                           max_words=max_words,
+                           languages=LANGUAGES,
+                           active_tab='visualize',
+                           total_vectors=len(words_data),
+                           load_time=f"{load_time:.2f}s")
 
 
 
