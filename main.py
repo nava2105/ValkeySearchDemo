@@ -4,11 +4,11 @@ import numpy as np
 from wordfreq import top_n_list
 from sentence_transformers import SentenceTransformer
 
-# Configuración para Windows
+# Windows Configuration
 os.environ['HF_HUB_DISABLE_SYMLINKS_WARNING'] = '1'
 os.environ['HF_HUB_DISABLE_SYMLINKS'] = '1'
 
-# Conexión (IMPORTANTE: decode_responses=False)
+# Connection String
 client = valkey.Valkey(host='localhost', port=6379, decode_responses=False)
 
 print("Cargando modelo...")
@@ -17,10 +17,12 @@ print("✓ Modelo cargado")
 
 
 def clean_database():
-    """LIMPIA TODO antes de empezar"""
+    """
+    Clean all data before start
+    :return:
+    """
     print("\n=== LIMPIANDO BASE DE DATOS ===")
-
-    # Eliminar claves antiguas
+    # Delete old keys
     keys_to_delete = []
     for key in client.scan_iter("word:vector:*", count=1000):
         keys_to_delete.append(key)
@@ -28,18 +30,20 @@ def clean_database():
     if keys_to_delete:
         client.delete(*keys_to_delete)
         print(f"✓ Eliminadas {len(keys_to_delete)} claves antiguas")
-
-    # Eliminar índice si existe
+    # Delete index if it exists
     try:
         client.execute_command("FT.DROPINDEX", "words_idx")
         print("✓ Índice eliminado")
     except:
         print("No había índice previo")
-
     print("✓ Base de datos limpia\n")
 
 
 def get_words_by_language():
+    """
+    Get most frequent words by language
+    :return:
+    """
     languages = {
         'es': 'spanish', 'en': 'english', 'fr': 'french',
         'ru': 'russian', 'it': 'italian', 'de': 'german',
@@ -65,7 +69,6 @@ def get_words_by_language():
     #     'mr': 'Marathi', 'ne': 'Nepalí', 'pa': 'Punjabí',
     #     'ta': 'Tamil', 'te': 'Telugu'
     # }
-
     all_words = []
     for lang_code, lang_name in languages.items():
         print(f"Cargando palabras en {lang_name}...")
@@ -75,39 +78,39 @@ def get_words_by_language():
 
 
 def generate_and_store_embeddings():
+    """
+    Generate the embeddings and store them
+    :return:
+    """
     words = get_words_by_language()
     print(f"Total de palabras a procesar: {len(words)}")
-
     batch_size = 1000
     for i in range(0, len(words), batch_size):
         batch = words[i:i + batch_size]
         texts = [word for word, _ in batch]
-
         embeddings = model.encode(texts, show_progress_bar=False)
-
         pipeline = client.pipeline()
         for j, (word, lang_code) in enumerate(batch):
             word_hash = hash(word) & 0xFFFFFFFF
             key = f"word:vector:{lang_code}:{word_hash}"
-
-            # **Almacenar como HASH con BYTES**
+            # Store as HASH with BYTES
             vector_bytes = embeddings[j].astype(np.float32).tobytes()
             pipeline.hset(key, mapping={
                 "word": word.encode('utf-8'),
                 "language": lang_code.encode('utf-8'),
                 "vector": vector_bytes
             })
-
         pipeline.execute()
         print(f"Lote {i // batch_size + 1} procesado ({len(batch)} palabras)")
-
     print("✓ Embeddings almacenados")
 
 
 def create_vector_index():
-    """Crear índice con sintaxis MÍNIMA garantizada"""
+    """
+    Create index with guaranteed MINIMUM syntax
+    :return:
+    """
     print("Creando índice...")
-
     result = client.execute_command(
         "FT.CREATE", "words_idx",
         "ON", "HASH",
@@ -123,12 +126,14 @@ def create_vector_index():
 
 
 def verify_storage():
+    """
+    Check whether the storage is in the base.
+    :return:
+    """
     print("\n=== VERIFICANDO ALMACENAMIENTO ===")
-
     count = sum(1 for key in client.scan_iter("word:vector:*", count=1000)
                 if client.type(key) == b'hash')
     print(f"Claves HASH válidas: {count}")
-
     if count > 0:
         for key in client.scan_iter("word:vector:*", count=100):
             if client.type(key) == b'hash':
@@ -141,11 +146,13 @@ def verify_storage():
 
 
 def test_search():
+    """
+    Test the search function
+    :return:
+    """
     print("\n=== PRUEBA BÚSQUEDA ===")
-
     query_word = "gatto"
     query_vector = model.encode([query_word])[0].astype(np.float32).tobytes()
-
     results = client.execute_command(
         "FT.SEARCH", "words_idx",
         "*=>[KNN 5 @vector $vec]",
@@ -154,7 +161,6 @@ def test_search():
         "RETURN", "2", "word", "language",
         "LIMIT", "0", "5"
     )
-
     if len(results) > 1:
         print(f"✓ {len(results) // 2} resultados:")
         for i in range(1, len(results), 2):
@@ -167,17 +173,13 @@ def test_search():
 
 
 if __name__ == "__main__":
-    # **SIEMPRE LIMPIAR PRIMERO**
+    # Always clean first
     clean_database()
-
     print("1. Generando embeddings...")
     generate_and_store_embeddings()
-
     print("\n2. Creando índice...")
     create_vector_index()
-
     print("\n3. Verificando...")
     verify_storage()
-
     print("\n4. Probando búsqueda...")
     test_search()
