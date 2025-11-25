@@ -120,6 +120,11 @@ Technologies used in this project:
 * Dictionary tab: Search semantically similar words
 * Game tab: Play "Connect Words"
 
+7. Use ngrok
+   ```bash
+   ngrok http 5000
+   ```
+
 ---
 
 ## Usage

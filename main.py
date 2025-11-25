@@ -12,7 +12,7 @@ os.environ['HF_HUB_DISABLE_SYMLINKS'] = '1'
 client = valkey.Valkey(host='localhost', port=6379, decode_responses=False)
 
 print("Cargando modelo...")
-model = SentenceTransformer('paraphrase-multilingual-MiniLM-L12-v2')
+model = SentenceTransformer('paraphrase-multilingual-MiniLM-L12-v2') # 12 Layers, Tokenization, Contextual Embeddings, Pooling, Output, Multilingual 50 languages
 print("✓ Modelo cargado")
 
 
@@ -118,7 +118,7 @@ def create_vector_index():
         "SCHEMA",
         "vector", "VECTOR", "HNSW", "6",
         "TYPE", "FLOAT32",
-        "DIM", "384",
+        "DIM", "384", # 384 vector dimensions
         "DISTANCE_METRIC", "COSINE"
     )
     print(f"✓ Índice creado: {result}")

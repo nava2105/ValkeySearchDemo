@@ -314,7 +314,7 @@ def game():
 @app.route('/visualize', methods=['GET', 'POST'])
 def visualize():
     """
-    2D display
+    Tab 3: 2D display
     :return visualize.html:
     """
     plot_data = None
@@ -322,7 +322,7 @@ def visualize():
     max_words = 200
     if request.method == 'POST':
         selected_lang = request.form.get('language', 'all')
-        max_words = min(int(request.form.get('max_words', 200)), 10000)
+        max_words = min(int(request.form.get('max_words', 200)), 10000) # 10000 maximum vectors
     # Measure time
     start = time.time()
     words_data = get_sample(limit=max_words, lang_filter=selected_lang)
